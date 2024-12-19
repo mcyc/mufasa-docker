@@ -1,0 +1,8 @@
+services:
+  mufasa:
+    build:
+      context: ./v1.4.0
+    ports:
+      - "5001:5000"
+    stdin_open: true
+    tty: true

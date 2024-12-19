@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Create symbolic links for Python and pip (optional but convenient)
-RUN ln -s /usr/bin/python3 /usr/bin/python && \
-    ln -s /usr/bin/pip3 /usr/bin/pip
+RUN ln -sf /usr/bin/python3 /usr/bin/python && \
+    ln -sf /usr/bin/pip3 /usr/bin/pip
 
 # Install required Python libraries
 # Add MUFASA-specific dependencies here
