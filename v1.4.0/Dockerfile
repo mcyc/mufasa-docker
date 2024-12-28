@@ -1,29 +1,18 @@
-# Use Python 3.12 base image
-FROM python:3.12-slim
+FROM images.canfar.net/skaha/base-notebook@sha256:c7e8dbec40d1e74498919c0e2f629a8169c08e78fcb99b2c087646e3b4e75a1b
 
-# Set environment variables to avoid interactive prompts during installation
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
+ENV JUPYTER_RUNTIME_DIR=/root/.local/share/jupyter/runtime
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    python3 \
-    python3-pip \
-    && apt-get clean
+# Set the working directory
+WORKDIR /root/work
 
-# Copy the requirements file into the working directory
+# Copy and install dependencies
 COPY requirements.txt .
-
-# Create symbolic links for Python and pip (optional but convenient)
-RUN ln -sf /usr/bin/python3 /usr/bin/python && \
-    ln -sf /usr/bin/pip3 /usr/bin/pip
-
-# Install Python dependencies from the requirements file
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose a port (adjust this if your application uses a different port)
-EXPOSE 5000
+# Expose necessary ports
+EXPOSE 8888
 
-# Define the default command (adjust this to launch MUFASA)
-CMD ["python3", "-m", "http.server", "5000"]
+# Set the default command to launch Jupyter Notebook
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--NotebookApp.token=''"]
