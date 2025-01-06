@@ -6,6 +6,7 @@ Each version is encapsulated in its own directory.
 
 ## Available Versions
 - `latest` (points to the most recent stable version of MUFASA)
+- [v1.4.1](v1.4.1/README.md)
 - [v1.4.0](v1.4.0/README.md)
 
 ---
