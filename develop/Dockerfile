@@ -5,50 +5,63 @@ ARG USER_HOME=/home/canfar-user
 
 # Create a user for CANFAR environments and set up directories
 RUN useradd -ms /bin/bash canfar-user && \
-    mkdir -p $USER_HOME/mufasa && \
+    mkdir -p $USER_HOME && \
     chown -R canfar-user:canfar-user $USER_HOME
 
 # Switch to the new user
 USER canfar-user
-WORKDIR $USER_HOME/mufasa
+WORKDIR $USER_HOME
 
-# Clone the mufasa repository and install it in editable mode
-RUN git clone https://github.com/mcyc/mufasa.git $USER_HOME/mufasa && \
-    pip install --no-cache-dir -e $USER_HOME/mufasa
-
-# Install Git for version control
+# Ensure Git is installed
 USER root
 RUN apt-get update && \
-    apt-get install -y git && \
-    git config --global credential.helper store && \
+    apt-get install -y git wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Add runtime scripts to handle home and credentials setup
-RUN echo '#!/bin/bash' > /usr/local/bin/setup_home.sh && \
-    echo 'mkdir -p $HOME/mufasa && chown -R $(whoami):$(whoami) $HOME/mufasa' >> /usr/local/bin/setup_home.sh && \
-    chmod +x /usr/local/bin/setup_home.sh
+# Add Sublime Text repository and install it
+RUN wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | apt-key add - && \
+    echo "deb https://download.sublimetext.com/ apt/stable/" | tee /etc/apt/sources.list.d/sublime-text.list && \
+    apt-get update && \
+    apt-get install -y sublime-text && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN echo '#!/bin/bash' > /usr/local/bin/check_git_credentials.sh && \
-    echo 'CREDENTIALS_PATH="$HOME/.git-credentials"' >> /usr/local/bin/check_git_credentials.sh && \
-    echo 'if [ ! -f "$CREDENTIALS_PATH" ] || [ ! -s "$CREDENTIALS_PATH" ]; then' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  echo "Git credentials not found. Please configure your credentials."' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  read -p "Enter your Git username: " git_user' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  read -p "Enter your Git email: " git_email' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  git config --global user.name "$git_user"' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  git config --global user.email "$git_email"' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  read -sp "Enter your Git password or PAT: " git_pass && echo' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  echo "https://${git_user}:${git_pass}@github.com" > "$CREDENTIALS_PATH"' >> /usr/local/bin/check_git_credentials.sh && \
-    echo '  echo "Git credentials have been saved."' >> /usr/local/bin/check_git_credentials.sh && \
-    echo 'fi' >> /usr/local/bin/check_git_credentials.sh && \
-    chmod +x /usr/local/bin/check_git_credentials.sh
+# Install required Python tools and extensions
+RUN pip install --no-cache-dir jupyter-server-proxy dask[complete] distributed
 
-# Ensure runtime scripts are sourced in new terminal sessions
-RUN echo "/usr/local/bin/setup_home.sh" >> /etc/bash.bashrc && \
-    echo "/usr/local/bin/check_git_credentials.sh" >> /etc/bash.bashrc
+# Add Sublime Text to the Jupyter launcher
+RUN mkdir -p /usr/local/share/jupyter-server-proxy && \
+    echo "def setup_sublime():\n" > /usr/local/share/jupyter-server-proxy/sublime_text.py && \
+    echo "    return {'command': ['/usr/bin/sublime_text'], 'timeout': 60, 'launcher_entry': {'title': 'Sublime Text', 'icon_path': ''}}" >> /usr/local/share/jupyter-server-proxy/sublime_text.py
 
-# Switch back to the non-root user
+# Add Dask Dashboard to the Jupyter launcher
+RUN echo "def setup_dask():\n" > /usr/local/share/jupyter-server-proxy/dask.py && \
+    echo "    return {'command': ['dask-scheduler'], 'timeout': 60, 'launcher_entry': {'title': 'Dask Dashboard', 'icon_path': ''}}" >> /usr/local/share/jupyter-server-proxy/dask.py
+
+# Add the setup script for mufasa
+RUN echo '#!/bin/bash' > $USER_HOME/setup_mufasa.sh && \
+    echo 'cd $HOME' >> $USER_HOME/setup_mufasa.sh && \
+    echo 'if [ -d "$HOME/mufasa" ]; then' >> $USER_HOME/setup_mufasa.sh && \
+    echo '  if [ -d "$HOME/mufasa/.git" ] && [ "$(git -C $HOME/mufasa config --get remote.origin.url)" = "https://github.com/mcyc/mufasa.git" ]; then' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    echo "Pulling latest changes from mufasa repository."' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    git -C $HOME/mufasa pull' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    if ! pip show mufasa | grep -q "Location: $HOME/mufasa"; then' >> $USER_HOME/setup_mufasa.sh && \
+    echo '      pip install --no-cache-dir -e $HOME/mufasa' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    fi' >> $USER_HOME/setup_mufasa.sh && \
+    echo '  else' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    echo "Directory exists but is not a valid mufasa repository. Removing and cloning fresh."' >> $USER_HOME/setup_mufasa.sh && \
+    echo '    rm -rf $HOME/mufasa && git clone https://github.com/mcyc/mufasa.git $HOME/mufasa && pip install --no-cache-dir -e $HOME/mufasa' >> $USER_HOME/setup_mufasa.sh && \
+    echo '  fi' >> $USER_HOME/setup_mufasa.sh && \
+    echo 'else' >> $USER_HOME/setup_mufasa.sh && \
+    echo '  echo "Cloning mufasa repository."' >> $USER_HOME/setup_mufasa.sh && \
+    echo '  git clone https://github.com/mcyc/mufasa.git $HOME/mufasa && pip install --no-cache-dir -e $HOME/mufasa' >> $USER_HOME/setup_mufasa.sh && \
+    echo 'fi' >> $USER_HOME/setup_mufasa.sh && \
+    chmod +x $USER_HOME/setup_mufasa.sh
+
+USER root
+RUN echo "$USER_HOME/setup_mufasa.sh" >> /etc/bash.bashrc
 USER canfar-user
 
-# Default command to start Jupyter Notebook
-CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--ServerApp.token=''"]
+# Default command to start Jupyter Notebook and Dask Scheduler
+CMD ["sh", "-c", "dask-scheduler & jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token=''"]
